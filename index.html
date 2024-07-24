@@ -5,7 +5,7 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	
-	<title>Mobile tutorial - Leaflet</title>
+	<title>Orine</title>
 	
 	<link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
 
@@ -33,14 +33,13 @@
 
 <script>
     const eniro = L.tileLayer('https://map01.eniro.com/geowebcache/service/tms1.0.0/nautical2x/{z}/{x}/{y}.png', { tms: true });
-    const map = L.map('map', { zoom: 0, center: L.latLng(58.78587533344768, 11.182938585545399), layers: [eniro]}).fitWorld();
+    const map = L.map('map', { layers: [eniro]}).fitWorld();
 
 
 	function onLocationFound(e) {
 		const radius = e.accuracy / 2;
 
-		const locationMarker = L.marker(e.latlng).addTo(map)
-			.bindPopup(`You are within ${radius} meters from this point`).openPopup();
+		const locationMarker = L.marker(e.latlng).addTo(map);
 
 		const locationCircle = L.circle(e.latlng, radius).addTo(map);
 	}
