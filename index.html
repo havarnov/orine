@@ -38,14 +38,33 @@
 <script>
     const eniro = L.tileLayer('https://map01.eniro.com/geowebcache/service/tms1.0.0/nautical2x/{z}/{x}/{y}.png', { tms: true });
     const map = L.map('map', { layers: [eniro]}).fitWorld();
+    let locationMarker = null;
+    let locationCircle = null;
 
 
 	function onLocationFound(e) {
+		
+
+		if (locationMarker === null)
+		{
+		    locationMarker = L.marker(e.latlng).addTo(map);
+		}
+		else
+		{
+		    locationMarker.setLatLng(e.latlng);
+		}
+
 		const radius = e.accuracy / 2;
+		if (locationCircle === null)
+		{
+		    locationCircle = L.circle(e.latlng, radius).addTo(map);
+		}
+		else
+		{
+		    locationCircle.setLatLng(e.latlng);
+		    locationCircle.setRadius(radius);
+		}
 
-		const locationMarker = L.marker(e.latlng).addTo(map);
-
-		const locationCircle = L.circle(e.latlng, radius).addTo(map);
 	}
 
 	function onLocationError(e) {
