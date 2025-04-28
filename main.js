@@ -310,7 +310,6 @@ map.on('pointermove', function (evt) {
   displayFeatureInfo(evt.pixel, evt.originalEvent.target);
 });
 
-map.getTargetElement().addEventListener('pointerleave', function () {
-  currentFeature = undefined;
-  info.style.visibility = 'hidden';
+map.addEventListener('click', function (evt) {
+  displayFeatureInfo(evt.pixel, evt.originalEvent.target);
 });
