@@ -11,7 +11,37 @@ import Style from 'ol/style/Style.js';
 import Icon from 'ol/style/Icon.js';
 import {MVT} from "ol/format";
 import {ImageTile, TileDebug} from "ol/source";
+import {Control} from "ol/control";
+import {defaults as defaultControls} from 'ol/control/defaults.js';
 
+class ToggleWindControl extends Control {
+  /**
+   * @param {Object} [opt_options] Control options.
+   */
+  constructor(onClick, opt_options) {
+    const options = opt_options || {};
+
+    const button = document.createElement('button');
+    button.innerHTML = '🌀';
+
+    const element = document.createElement('div');
+    element.className = 'toggle-wind ol-unselectable ol-control';
+    element.appendChild(button);
+
+    super({
+      element: element,
+      target: options.target,
+    });
+
+    this.onClick = onClick;
+
+    button.addEventListener('click', this.handleToggleWind.bind(this), false);
+  }
+
+  handleToggleWind(event) {
+    this.onClick();
+  }
+}
 
 const source = new VectorTileSource({
   format: new MVT(),
@@ -20,40 +50,61 @@ const source = new VectorTileSource({
   projection: 'EPSG:3857',
 });
 
+const windLayer = new VectorTileLayer({
+  source: source,
+  visible: false,
+  style: function (feature) {
+    const properties = feature.getProperties();
+    const windSpeed = Math.sqrt(properties.u * properties.u + properties.v * properties.v);
+    const name = metersPerSecondToKnotsString(windSpeed);
+    return new Style({
+      image: new Icon({
+        opacity: 1,
+        src: `barbs/${name}.svg`, // 'data:image/svg+xml;utf8,' + svg,
+        scale: 100, // Start with a scale of 1 and adjust as needed
+        rotation: Math.PI - Math.atan2(properties.v, properties.u) + (Math.PI/2), // properties.direction/Math.PI,
+      })
+    });
+  },
+});
+
+const osmLayer = new TileLayer({
+  source: new OSM(),
+  maxZoom: 7,
+});
+
+const eniroLayer = new TileLayer({
+  source: new ImageTile({
+    url: 'https://map02.eniro.com/geowebcache/service/tms1.0.0/nautical2x/{z}/{x}/{-y}.png',
+  }),
+  minZoom: 7,
+});
+
+const toggleControl = new ToggleWindControl(
+    () => {
+      if (windLayer.getVisible()) {
+        osmLayer.setOpacity(1);
+        eniroLayer.setOpacity(1);
+        windLayer.setVisible(false);
+      } else {
+        osmLayer.setOpacity(0.3);
+        eniroLayer.setOpacity(0.3);
+        windLayer.setVisible(true);
+      }
+    });
+
 const map = new Map({
   target: 'map',
+  controls: defaultControls().extend([toggleControl]),
   layers: [
-    new TileLayer({
-      source: new OSM(),
-      maxZoom: 7,
-    }),
-    new TileLayer({
-      source: new ImageTile({
-        url: 'https://map02.eniro.com/geowebcache/service/tms1.0.0/nautical2x/{z}/{x}/{-y}.png',
-      }),
-      minZoom: 7,
-    }),
     // new TileLayer({
     //     source: new TileDebug({
     //         source: source,
     //     }),
     // }),
-    new VectorTileLayer({
-      source: source,
-      style: function (feature) {
-        const properties = feature.getProperties();
-        const windSpeed = Math.sqrt(properties.u * properties.u + properties.v * properties.v);
-        const name = metersPerSecondToKnotsString(windSpeed);
-        return new Style({
-          image: new Icon({
-            opacity: 1,
-            src: `barbs/${name}.svg`, // 'data:image/svg+xml;utf8,' + svg,
-            scale: 100, // Start with a scale of 1 and adjust as needed
-            rotation: Math.PI - Math.atan2(properties.v, properties.u) + (Math.PI/2), // properties.direction/Math.PI,
-          })
-        });
-      },
-    }),
+    osmLayer,
+    eniroLayer,
+    windLayer,
   ],
   view: new View({
     projection: 'EPSG:3857',

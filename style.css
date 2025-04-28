@@ -28,3 +28,11 @@ html, body {
   visibility: hidden;
   pointer-events: none;
 }
+
+.toggle-wind {
+  top: 65px;
+  left: .5em;
+}
+.ol-touch .toggle-wind {
+  top: 80px;
+}
