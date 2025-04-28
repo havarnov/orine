@@ -49,6 +49,13 @@ class ToggleControl extends Control {
   }
 }
 
+const view = new View({
+  projection: 'EPSG:3857',
+  center: [1152058.890314, 8033837.420885],
+  zoom: 8,
+  rotation: Math.PI / 6,
+});
+
 const source = new VectorTileSource({
   format: new MVT(),
   url: `https://gfstileserver.fly.dev/tiles/gfs/${new Date().toISOString()}/wind/M10/{x}/{y}/{z}`,
@@ -68,7 +75,7 @@ const windLayer = new VectorTileLayer({
         opacity: 1,
         src: `svgs/${name}.svg`, // 'data:image/svg+xml;utf8,' + svg,
         scale: 100, // Start with a scale of 1 and adjust as needed
-        rotation: Math.PI - Math.atan2(properties.v, properties.u) + (Math.PI/2), // properties.direction/Math.PI,
+        rotation: Math.PI - Math.atan2(properties.v, properties.u) + (Math.PI/2) + view.getRotation(), // properties.direction/Math.PI,
       })
     });
   },
@@ -84,12 +91,6 @@ const eniroLayer = new TileLayer({
     url: 'https://map02.eniro.com/geowebcache/service/tms1.0.0/nautical2x/{z}/{x}/{-y}.png',
   }),
   minZoom: 7,
-});
-
-const view = new View({
-  projection: 'EPSG:3857',
-  center: [1152058.890314, 8033837.420885],
-  zoom: 8,
 });
 
 const toggleWindControl = new ToggleControl(
