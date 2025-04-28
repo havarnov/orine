@@ -53,13 +53,12 @@ const view = new View({
   projection: 'EPSG:3857',
   center: [1152058.890314, 8033837.420885],
   zoom: 8,
-  rotation: Math.PI / 6,
 });
 
 const source = new VectorTileSource({
   format: new MVT(),
   url: `https://gfstileserver.fly.dev/tiles/gfs/${new Date().toISOString()}/wind/M10/{x}/{y}/{z}`,
-  tileSize: 128,
+  tileSize: 100,
   projection: 'EPSG:3857',
 });
 
