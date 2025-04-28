@@ -30,19 +30,19 @@ html, body {
 }
 
 .toggle-wind {
-  top: 65px;
-  left: .5em;
-}
-.ol-touch .toggle-wind {
-  top: 80px;
-}
-
-.toggle-track-location {
   top: 90px;
   left: .5em;
 }
-.ol-touch .toggle-track-location {
+.ol-touch .toggle-wind {
   top: 115px;
+}
+
+.toggle-track-location {
+  top: 65px;
+  left: .5em;
+}
+.ol-touch .toggle-track-location {
+  top: 80px;
 }
 
 .ol-control img {
