@@ -1,5 +1,4 @@
 import './style.css';
-import './barbs/0.svg';
 
 import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
@@ -7,25 +6,32 @@ import Map from 'ol/Map.js';
 import View from 'ol/View.js';
 import VectorTileLayer from 'ol/layer/VectorTile.js';
 import VectorTileSource from 'ol/source/VectorTile.js';
+import VectorLayer from 'ol/layer/Vector.js';
+import VectorSource from 'ol/source/Vector.js';
 import Style from 'ol/style/Style.js';
 import Icon from 'ol/style/Icon.js';
 import {MVT} from "ol/format";
 import {ImageTile, TileDebug} from "ol/source";
 import {Control} from "ol/control";
 import {defaults as defaultControls} from 'ol/control/defaults.js';
+import Geolocation from 'ol/Geolocation.js';
+import {Point} from "ol/geom";
+import {Feature} from "ol";
+import CircleStyle from "ol/style/Circle";
+import {Fill, Stroke} from "ol/style";
 
-class ToggleWindControl extends Control {
+class ToggleControl extends Control {
   /**
    * @param {Object} [opt_options] Control options.
    */
-  constructor(onClick, opt_options) {
+  constructor(icon, className, onClick, opt_options) {
     const options = opt_options || {};
 
     const button = document.createElement('button');
-    button.innerHTML = '🌀';
+    button.innerHTML = icon;
 
     const element = document.createElement('div');
-    element.className = 'toggle-wind ol-unselectable ol-control';
+    element.className = `${className} ol-unselectable ol-control`;
     element.appendChild(button);
 
     super({
@@ -35,11 +41,11 @@ class ToggleWindControl extends Control {
 
     this.onClick = onClick;
 
-    button.addEventListener('click', this.handleToggleWind.bind(this), false);
+    button.addEventListener('click', this.handleClick.bind(this), false);
   }
 
-  handleToggleWind(event) {
-    this.onClick();
+  handleClick() {
+    this.onClick(this);
   }
 }
 
@@ -60,7 +66,7 @@ const windLayer = new VectorTileLayer({
     return new Style({
       image: new Icon({
         opacity: 1,
-        src: `barbs/${name}.svg`, // 'data:image/svg+xml;utf8,' + svg,
+        src: `svgs/${name}.svg`, // 'data:image/svg+xml;utf8,' + svg,
         scale: 100, // Start with a scale of 1 and adjust as needed
         rotation: Math.PI - Math.atan2(properties.v, properties.u) + (Math.PI/2), // properties.direction/Math.PI,
       })
@@ -80,22 +86,93 @@ const eniroLayer = new TileLayer({
   minZoom: 7,
 });
 
-const toggleControl = new ToggleWindControl(
-    () => {
+const view = new View({
+  projection: 'EPSG:3857',
+  center: [1152058.890314, 8033837.420885],
+  zoom: 8,
+});
+
+const toggleWindControl = new ToggleControl(
+    '<img src="svgs/wind.svg" />',
+    'toggle-wind',
+    (e) => {
       if (windLayer.getVisible()) {
         osmLayer.setOpacity(1);
         eniroLayer.setOpacity(1);
         windLayer.setVisible(false);
+        e.element.childNodes[0].childNodes[0].className = '';
       } else {
         osmLayer.setOpacity(0.3);
         eniroLayer.setOpacity(0.3);
         windLayer.setVisible(true);
+        e.element.childNodes[0].childNodes[0].className = 'active';
       }
+    });
+
+const geolocation = new Geolocation({
+  // enableHighAccuracy must be set to true to have the heading value.
+  trackingOptions: {
+    enableHighAccuracy: true,
+  },
+  projection: view.getProjection(),
+});
+
+// handle geolocation error.
+geolocation.on('error', function (error) {
+  const info = document.getElementById('info');
+  info.innerHTML = error.message;
+  info.style.display = '';
+});
+
+const accuracyFeature = new Feature();
+geolocation.on('change:accuracyGeometry', function () {
+  accuracyFeature.setGeometry(geolocation.getAccuracyGeometry());
+});
+
+const positionFeature = new Feature();
+positionFeature.setStyle(
+    new Style({
+      image: new CircleStyle({
+        radius: 6,
+        fill: new Fill({
+          color: '#3399CC',
+        }),
+        stroke: new Stroke({
+          color: '#fff',
+          width: 2,
+        }),
+      }),
+    }),
+);
+
+let tracking = false;
+
+geolocation.on('change:position', function () {
+  const coordinates = geolocation.getPosition();
+  positionFeature.setGeometry(coordinates ? new Point(coordinates) : null);
+  if (tracking) {
+    view.setCenter(coordinates);
+  }
+});
+
+const locationLayer = new VectorLayer({
+  source: new VectorSource({
+    features: [accuracyFeature, positionFeature],
+  }),
+});
+
+const toggleTrackControl = new ToggleControl(
+    '<img src="svgs/crosshair.svg" style="width: 100%; object-fit: cover;" />',
+    'toggle-track-location',
+    e => {
+      geolocation.setTracking(true);
+      tracking = !tracking;
+      e.element.childNodes[0].childNodes[0].className = tracking ? 'active' : '';
     });
 
 const map = new Map({
   target: 'map',
-  controls: defaultControls().extend([toggleControl]),
+  controls: defaultControls().extend([toggleWindControl, toggleTrackControl]),
   layers: [
     // new TileLayer({
     //     source: new TileDebug({
@@ -105,12 +182,9 @@ const map = new Map({
     osmLayer,
     eniroLayer,
     windLayer,
+    locationLayer,
   ],
-  view: new View({
-    projection: 'EPSG:3857',
-    center: [1152058.890314, 8033837.420885],
-    zoom: 8,
-  })
+  view: view,
 });
 
 function metersPerSecondToKnotsString(metersPerSecond) {
@@ -208,7 +282,7 @@ const displayFeatureInfo = function (pixel, target) {
       : map.forEachFeatureAtPixel(pixel, function (feature) {
         return feature;
       });
-  if (feature) {
+  if (feature && feature.getProperties().u !== undefined) {
     info.style.left = pixel[0] + 'px';
     info.style.top = pixel[1] + 'px';
     if (feature !== currentFeature) {
@@ -233,10 +307,6 @@ map.on('pointermove', function (evt) {
     currentFeature = undefined;
     return;
   }
-  displayFeatureInfo(evt.pixel, evt.originalEvent.target);
-});
-
-map.on('click', function (evt) {
   displayFeatureInfo(evt.pixel, evt.originalEvent.target);
 });
 

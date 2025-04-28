@@ -36,3 +36,20 @@ html, body {
 .ol-touch .toggle-wind {
   top: 80px;
 }
+
+.toggle-track-location {
+  top: 90px;
+  left: .5em;
+}
+.ol-touch .toggle-track-location {
+  top: 110px;
+}
+
+.ol-control img {
+  width: 100%;
+  object-fit: cover;
+}
+
+.ol-control img.active {
+  filter: invert(0.5) sepia(1) saturate(5) hue-rotate(175deg);
+}
