@@ -19,6 +19,7 @@ import {Point} from "ol/geom";
 import {Feature} from "ol";
 import CircleStyle from "ol/style/Circle";
 import {Fill, Stroke} from "ol/style";
+import toLonLat from "ol/proj";
 
 class ToggleControl extends Control {
   /**
@@ -275,41 +276,28 @@ function metersPerSecondToKnotsString(metersPerSecond) {
 
 const info = document.getElementById('info');
 
-let currentFeature;
-const displayFeatureInfo = function (pixel, target) {
-  const feature = target.closest('.ol-control')
-      ? undefined
-      : map.forEachFeatureAtPixel(pixel, function (feature) {
-        return feature;
-      });
-  if (feature && feature.getProperties().u !== undefined) {
-    info.style.left = pixel[0] + 'px';
-    info.style.top = pixel[1] + 'px';
-    if (feature !== currentFeature) {
-      info.style.visibility = 'visible';
-      const u = feature.get('u');
-      const v = feature.get('v');
-      const speed = Math.sqrt(u * u + v * v);
-      const rad = Math.PI - Math.atan2(v, u) + (Math.PI/2);
-      const angle = rad * (180 / Math.PI);
-      const adj = (angle + 360) % 360;
-      info.innerText = speed.toFixed(2) + 'm/s @' + adj.toFixed(1) + '°'; // + ` (${u},${v},${Math.atan2(v, u)})`;
-    }
-  } else {
-    info.style.visibility = 'hidden';
-  }
-  currentFeature = feature;
-};
+map.addEventListener('movestart', function(e) {
+  info.style.visibility = 'hidden';
+})
 
-map.on('pointermove', function (evt) {
-  if (evt.dragging) {
-    info.style.visibility = 'hidden';
-    currentFeature = undefined;
-    return;
-  }
-  displayFeatureInfo(evt.pixel, evt.originalEvent.target);
-});
+map.addEventListener('click', async function (evt) {
+  info.style.visibility = 'hidden';
 
-map.addEventListener('click', function (evt) {
-  displayFeatureInfo(evt.pixel, evt.originalEvent.target);
+  const point = map.getCoordinateFromPixel(evt.pixel);
+  const lonLat = toLonLat(point);
+
+  const response = await fetch(`https://gfstileserver.fly.dev/position/gfs/${new Date().toISOString()}/wind/M10/${lonLat[1]}/${lonLat[0]}`);
+  const data = await response.json();
+
+  info.style.left = evt.pixel[0] + 'px';
+  info.style.top = evt.pixel[1] + 'px';
+  info.style.visibility = 'visible';
+
+  const u = data.u;
+  const v = data.v;
+  const speed = Math.sqrt(u * u + v * v);
+  const rad = Math.PI - Math.atan2(v, u) + (Math.PI / 2);
+  const angle = rad * (180 / Math.PI);
+  const adj = (angle + 360) % 360;
+  info.innerText = speed.toFixed(2) + 'm/s @' + adj.toFixed(1) + '°'; // + ` (${u},${v},${Math.atan2(v, u)})`;
 });
