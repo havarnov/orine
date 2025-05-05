@@ -19,7 +19,7 @@ import {Point} from "ol/geom";
 import {Feature} from "ol";
 import CircleStyle from "ol/style/Circle";
 import {Fill, Stroke} from "ol/style";
-import toLonLat from "ol/proj";
+import {toLonLat} from "ol/proj";
 
 class ToggleControl extends Control {
   /**
