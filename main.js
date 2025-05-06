@@ -50,6 +50,8 @@ class ToggleControl extends Control {
   }
 }
 
+const info = document.getElementById('info');
+
 const view = new View({
   projection: 'EPSG:3857',
   center: [1152058.890314, 8033837.420885],
@@ -58,7 +60,7 @@ const view = new View({
 
 const source = new VectorTileSource({
   format: new MVT(),
-  url: `https://gfstileserver.fly.dev/tiles/gfs/${new Date().toISOString()}/wind/M10/{x}/{y}/{z}`,
+  tileUrlFunction: (tileCoord) => `https://gfstileserver.fly.dev/tiles/gfs/${new Date().toISOString()}/wind/M10/${tileCoord[1]}/${tileCoord[2]}/${tileCoord[0]}`,
   tileSize: 100,
   projection: 'EPSG:3857',
 });
@@ -102,6 +104,7 @@ const toggleWindControl = new ToggleControl(
         eniroLayer.setOpacity(1);
         windLayer.setVisible(false);
         e.element.childNodes[0].childNodes[0].className = '';
+        info.style.visibility = 'hidden';
       } else {
         osmLayer.setOpacity(0.3);
         eniroLayer.setOpacity(0.3);
@@ -274,7 +277,6 @@ function metersPerSecondToKnotsString(metersPerSecond) {
   }
 }
 
-const info = document.getElementById('info');
 
 map.addEventListener('movestart', function(e) {
   info.style.visibility = 'hidden';
@@ -282,6 +284,11 @@ map.addEventListener('movestart', function(e) {
 
 map.addEventListener('click', async function (evt) {
   info.style.visibility = 'hidden';
+
+  if (!windLayer.getVisible())
+  {
+    return;
+  }
 
   const point = map.getCoordinateFromPixel(evt.pixel);
   const lonLat = toLonLat(point);
@@ -299,5 +306,5 @@ map.addEventListener('click', async function (evt) {
   const rad = Math.PI - Math.atan2(v, u) + (Math.PI / 2);
   const angle = rad * (180 / Math.PI);
   const adj = (angle + 360) % 360;
-  info.innerText = speed.toFixed(2) + 'm/s @' + adj.toFixed(1) + '°'; // + ` (${u},${v},${Math.atan2(v, u)})`;
+  info.innerText = speed.toFixed(2) + 'm/s @' + adj.toFixed(1) + '°';
 });
