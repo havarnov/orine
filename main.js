@@ -21,6 +21,89 @@ import CircleStyle from "ol/style/Circle";
 import {Fill, Stroke} from "ol/style";
 import {toLonLat} from "ol/proj";
 
+class ForecastSelectorControl extends Control {
+  constructor(opt_options) {
+    const options = opt_options || {};
+
+    const element = document.createElement('div');
+    element.className = `forecast-control ol-unselectable ol-control`;
+    element.style.visibility = 'hidden';
+
+    super({
+      element: element,
+      target: options.target,
+    });
+
+    this.current = new Date();
+    this.current.setHours(new Date().getHours(), 0, 0, 0);
+    this.currentOffset = 0;
+
+    this.text = document.createElement('div');
+    this.text.innerHTML = this.current.toISOString();
+
+    this.back = document.createElement('button');
+    this.back.innerHTML = '-3h'
+
+    this.forward = document.createElement('button');
+    this.forward.innerHTML = '+3h'
+
+    element.appendChild(this.back);
+    element.appendChild(this.text);
+    element.appendChild(this.forward);
+
+    this.target = new EventTarget();
+
+    this.back.addEventListener('click', () => {
+      if (this.currentOffset == 0)
+      {
+        return;
+      }
+
+      let multiplier = 3;
+
+      this.currentOffset -= multiplier;
+
+      this.current.setHours(this.current.getHours() - multiplier, 0, 0, 0);
+      this.target.dispatchEvent(new Event('updated'));
+      this.text.innerHTML = this.current.toISOString();
+    }, false);
+
+    this.forward.addEventListener('click', () => {
+      if (this.currentOffset == 384)
+      {
+        return;
+      }
+
+      let multiplier = 3;
+
+      this.currentOffset += multiplier;
+
+      this.current.setHours(this.current.getHours() + multiplier, 0, 0, 0);
+      this.target.dispatchEvent(new Event('updated'));
+      this.text.innerHTML = this.current.toISOString();
+    }, false);
+  }
+
+  getCurrentDate() {
+    return this.current;
+  }
+
+  addEventListener(type, callback) {
+    this.target.addEventListener(type, callback);
+  }
+
+  toggleVisibility() {
+    if (this.element.style.visibility === 'hidden')
+    {
+      this.element.style.visibility = 'visible';
+    }
+    else
+    {
+      this.element.style.visibility = 'hidden';
+    }
+  }
+}
+
 class ToggleControl extends Control {
   /**
    * @param {Object} [opt_options] Control options.
@@ -52,6 +135,8 @@ class ToggleControl extends Control {
 
 const info = document.getElementById('info');
 
+const forecastSelector = new ForecastSelectorControl();
+
 const view = new View({
   projection: 'EPSG:3857',
   center: [1152058.890314, 8033837.420885],
@@ -60,9 +145,14 @@ const view = new View({
 
 const source = new VectorTileSource({
   format: new MVT(),
-  tileUrlFunction: (tileCoord) => `https://gfstileserver.fly.dev/tiles/gfs/${new Date().toISOString()}/wind/M10/${tileCoord[1]}/${tileCoord[2]}/${tileCoord[0]}`,
+  tileUrlFunction: (tileCoord) => `https://gfstileserver.fly.dev/tiles/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10/${tileCoord[1]}/${tileCoord[2]}/${tileCoord[0]}`,
   tileSize: 100,
   projection: 'EPSG:3857',
+});
+
+forecastSelector.addEventListener('updated', e => {
+  source.refresh();
+  info.style.visibility = 'hidden';
 });
 
 const windLayer = new VectorTileLayer({
@@ -99,6 +189,7 @@ const toggleWindControl = new ToggleControl(
     '<img src="svgs/wind.svg" />',
     'toggle-wind',
     (e) => {
+      forecastSelector.toggleVisibility();
       if (windLayer.getVisible()) {
         osmLayer.setOpacity(1);
         eniroLayer.setOpacity(1);
@@ -176,7 +267,7 @@ const toggleTrackControl = new ToggleControl(
 
 const map = new Map({
   target: 'map',
-  controls: defaultControls().extend([toggleWindControl, toggleTrackControl]),
+  controls: defaultControls().extend([toggleWindControl, toggleTrackControl, forecastSelector]),
   layers: [
     // new TileLayer({
     //     source: new TileDebug({
@@ -293,7 +384,7 @@ map.addEventListener('click', async function (evt) {
   const point = map.getCoordinateFromPixel(evt.pixel);
   const lonLat = toLonLat(point);
 
-  const response = await fetch(`https://gfstileserver.fly.dev/position/gfs/${new Date().toISOString()}/wind/M10/${lonLat[1]}/${lonLat[0]}`);
+  const response = await fetch(`https://gfstileserver.fly.dev/position/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10/${lonLat[1]}/${lonLat[0]}`);
   const data = await response.json();
 
   info.style.left = evt.pixel[0] + 'px';

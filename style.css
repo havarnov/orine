@@ -53,3 +53,12 @@ html, body {
 .ol-control img.active {
   filter: invert(0.5) sepia(1) saturate(5) hue-rotate(175deg);
 }
+
+.forecast-control {
+  bottom: 20px;
+}
+
+.forecast-control button {
+  width: 100%;
+  object-fit: cover;
+}
