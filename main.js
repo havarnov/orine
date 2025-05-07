@@ -143,15 +143,19 @@ const view = new View({
   zoom: 8,
 });
 
+const getUrl = () => {
+  return `https://gfstileserver.fly.dev/tiles/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10/{x}/{y}/{z}`;
+};
+
 const source = new VectorTileSource({
   format: new MVT(),
-  tileUrlFunction: (tileCoord) => `https://gfstileserver.fly.dev/tiles/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10/${tileCoord[1]}/${tileCoord[2]}/${tileCoord[0]}`,
+  url: getUrl(),
   tileSize: 100,
   projection: 'EPSG:3857',
 });
 
 forecastSelector.addEventListener('updated', e => {
-  source.refresh();
+  source.setUrl(getUrl());
   info.style.visibility = 'hidden';
 });
 
