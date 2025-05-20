@@ -27,162 +27,7 @@ import {createXYZ, wrapX} from 'ol/tilegrid.js';
 import {get as getProjection, transform} from 'ol/proj.js';
 import colormap from 'colormap';
 
-const windData = new Promise((resolve, reject) => {
-  const image = new Image();
-  image.onload = () => {
-    const canvas = document.createElement('canvas');
-    const width = image.width;
-    const height = image.height;
-    canvas.width = width;
-    canvas.height = height;
-
-    const context = canvas.getContext('2d');
-    context.drawImage(image, 0, 0);
-    const data = context.getImageData(0, 0, width, height).data;
-    resolve({data, width, height});
-  };
-  image.onerror = () => {
-    reject(new Error('failed to load'));
-  };
-  image.src = './wind-large.png';
-});
-
-function bilinearInterpolation(xAlong, yAlong, v11, v21, v12, v22) {
-  const q11 = (1 - xAlong) * (1 - yAlong) * v11;
-  const q21 = xAlong * (1 - yAlong) * v21;
-  const q12 = (1 - xAlong) * yAlong * v12;
-  const q22 = xAlong * yAlong * v22;
-  return q11 + q21 + q12 + q22;
-}
-
-function interpolatePixels(xAlong, yAlong, p11, p21, p12, p22) {
-  return p11.map((_, i) =>
-      bilinearInterpolation(xAlong, yAlong, p11[i], p21[i], p12[i], p22[i]),
-  );
-}
-
-const dataTileGrid = createXYZ();
-const dataTileSize = 256;
-
-const inputImageProjection = getProjection('EPSG:4326');
-const dataTileProjection = getProjection('EPSG:3857');
-
-const inputBands = 4;
-const dataBands = 3;
-
-// range of wind velocities
-// these values are stretched between 0 and 255 in the png
-// const minU = -21.32;
-// const maxU = 26.8;
-// const maxU = 27.494349;
-// const minU = -21.885653;
-const maxU = 33.52629;
-const minU = -27.433708;
-
-const deltaU = maxU - minU;
-
-// const minV = -21.57;
-// const maxV = 21.42;
-// const maxV = 24.721033;
-// const minV = -26.038967;
-const maxV = 27.448818;
-const minV = -27.851181;
-const deltaV = maxV - minV;
-
-const wind = new DataTileSource({
-  // transition must be 0, see https://github.com/openlayers/openlayers/issues/16119
-  transition: 0,
-  wrapX: true,
-  async loader(z, x, y) {
-    const {
-      data: inputData,
-      width: inputWidth,
-      height: inputHeight,
-    } = await windData;
-
-    const tileCoord = wrapX(dataTileGrid, [z, x, y], dataTileProjection);
-    const extent = dataTileGrid.getTileCoordExtent(tileCoord);
-    const resolution = dataTileGrid.getResolution(z);
-    const data = new Float32Array(dataTileSize * dataTileSize * dataBands);
-    for (let row = 0; row < dataTileSize; ++row) {
-      let offset = row * dataTileSize * dataBands;
-      const mapY = extent[3] - row * resolution;
-      for (let col = 0; col < dataTileSize; ++col) {
-        const mapX = extent[0] + col * resolution;
-        const [lon, lat] = transform(
-            [mapX, mapY],
-            dataTileProjection,
-            inputImageProjection,
-        );
-
-        const x = (inputWidth * (lon + 180)) / 360;
-        let x1 = Math.floor(x);
-        let x2 = Math.ceil(x);
-        const xAlong = x - x1;
-        if (x1 < 0) {
-          x1 += inputWidth;
-        }
-        if (x2 >= inputWidth) {
-          x2 -= inputWidth;
-        }
-
-        const y = (inputHeight * (90 - lat)) / 180;
-        let y1 = Math.floor(y);
-        let y2 = Math.ceil(y);
-        const yAlong = y - y1;
-        if (y1 < 0) {
-          y1 = 0;
-        }
-        if (y2 >= inputHeight) {
-          y2 = inputHeight - 1;
-        }
-
-        const corners = [
-          [x1, y1],
-          [x2, y1],
-          [x1, y2],
-          [x2, y2],
-        ];
-
-        const pixels = corners.map(([cx, cy]) => {
-          const inputOffset = (cy * inputWidth + cx) * inputBands;
-          return [inputData[inputOffset], inputData[inputOffset + 1]];
-        });
-
-        const interpolated = interpolatePixels(xAlong, yAlong, ...pixels);
-        const u = minU + (deltaU * interpolated[0]) / 255;
-        const v = minV + (deltaV * interpolated[1]) / 255;
-
-        data[offset] = u;
-        data[offset + 1] = v;
-        offset += dataBands;
-      }
-    }
-    return data;
-  },
-});
-
-const maxSpeed = 20;
-const colors = colormap({
-  colormap: 'viridis',
-  nshades: 10,
-  alpha: 0.75,
-  format: 'rgba',
-});
-const colorStops = [];
-for (let i = 0; i < colors.length; ++i) {
-  colorStops.push((i * maxSpeed) / (colors.length - 1));
-  colorStops.push(colors[i]);
-}
-
-const flow =
-    new Flow({
-      source: wind,
-      maxSpeed,
-      style: {
-        color: ['interpolate', ['linear'], ['get', 'speed'], ...colorStops],
-      },
-    });
+const baseUrl = 'https://gfstileserver.fly.dev';
 
 class ForecastSelectorControl extends Control {
   constructor(opt_options) {
@@ -255,13 +100,10 @@ class ForecastSelectorControl extends Control {
     this.target.addEventListener(type, callback);
   }
 
-  toggleVisibility() {
-    if (this.element.style.visibility === 'hidden')
-    {
+  setVisible(visible) {
+    if (visible) {
       this.element.style.visibility = 'visible';
-    }
-    else
-    {
+    } else {
       this.element.style.visibility = 'hidden';
     }
   }
@@ -306,8 +148,172 @@ const view = new View({
   zoom: 8,
 });
 
+function toBase64(byteArray) {
+  let binary = '';
+  const len = byteArray.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(byteArray[i]);
+  }
+  return btoa(binary);
+}
+
+function getBase64ImageUrl(byteArray, mimeType = 'image/png') {
+  const base64String = toBase64(byteArray);
+  return `data:${mimeType};base64,${base64String}`;
+}
+
+const windDataProvider = () => new Promise(async (resolve, reject) => {
+    const res = await fetch(
+        `${baseUrl}/png/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10`,
+        { cache: "force-cache" });
+    const minU = parseFloat(res.headers.get("MinU"));
+    const maxU = parseFloat(res.headers.get("MaxU"));
+    const minV = parseFloat(res.headers.get("MinV"));
+    const maxV = parseFloat(res.headers.get("MaxV"));
+    const data = new Uint8Array(await res.arrayBuffer());
+    const imageUrl = getBase64ImageUrl(data);
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      const width = image.width;
+      const height = image.height;
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const data = context.getImageData(0, 0, width, height).data;
+      resolve({ data: data, width, height, minU, maxU, minV, maxV });
+    };
+    image.src = imageUrl;
+});
+
+function bilinearInterpolation(xAlong, yAlong, v11, v21, v12, v22) {
+  const q11 = (1 - xAlong) * (1 - yAlong) * v11;
+  const q21 = xAlong * (1 - yAlong) * v21;
+  const q12 = (1 - xAlong) * yAlong * v12;
+  const q22 = xAlong * yAlong * v22;
+  return q11 + q21 + q12 + q22;
+}
+
+function interpolatePixels(xAlong, yAlong, p11, p21, p12, p22) {
+  return p11.map((_, i) =>
+      bilinearInterpolation(xAlong, yAlong, p11[i], p21[i], p12[i], p22[i]),
+  );
+}
+
+const dataTileGrid = createXYZ();
+const dataTileSize = 256;
+
+const inputImageProjection = getProjection('EPSG:4326');
+const dataTileProjection = getProjection('EPSG:3857');
+
+const inputBands = 4;
+const dataBands = 3;
+
+const windFlowSource = new DataTileSource({
+  // transition must be 0, see https://github.com/openlayers/openlayers/issues/16119
+  transition: 0,
+  wrapX: true,
+  async loader(z, x, y) {
+    const {
+      data: inputData,
+      width: inputWidth,
+      height: inputHeight,
+      minU: minU,
+      maxU: maxU,
+      minV: minV,
+      maxV: maxV,
+    } = await windDataProvider(); // forecastSelector.getCurrentDate().toISOString());
+
+    const tileCoord = wrapX(dataTileGrid, [z, x, y], dataTileProjection);
+    const extent = dataTileGrid.getTileCoordExtent(tileCoord);
+    const resolution = dataTileGrid.getResolution(z);
+    const data = new Float32Array(dataTileSize * dataTileSize * dataBands);
+    for (let row = 0; row < dataTileSize; ++row) {
+      let offset = row * dataTileSize * dataBands;
+      const mapY = extent[3] - row * resolution;
+      for (let col = 0; col < dataTileSize; ++col) {
+        const mapX = extent[0] + col * resolution;
+        const [lon, lat] = transform(
+            [mapX, mapY],
+            dataTileProjection,
+            inputImageProjection,
+        );
+
+        const x = (inputWidth * (lon + 180)) / 360;
+        let x1 = Math.floor(x);
+        let x2 = Math.ceil(x);
+        const xAlong = x - x1;
+        if (x1 < 0) {
+          x1 += inputWidth;
+        }
+        if (x2 >= inputWidth) {
+          x2 -= inputWidth;
+        }
+
+        const y = (inputHeight * (90 - lat)) / 180;
+        let y1 = Math.floor(y);
+        let y2 = Math.ceil(y);
+        const yAlong = y - y1;
+        if (y1 < 0) {
+          y1 = 0;
+        }
+        if (y2 >= inputHeight) {
+          y2 = inputHeight - 1;
+        }
+
+        const corners = [
+          [x1, y1],
+          [x2, y1],
+          [x1, y2],
+          [x2, y2],
+        ];
+
+        const pixels = corners.map(([cx, cy]) => {
+          const inputOffset = (cy * inputWidth + cx) * inputBands;
+          return [inputData[inputOffset], inputData[inputOffset + 1]];
+        });
+
+        const interpolated = interpolatePixels(xAlong, yAlong, ...pixels);
+        const deltaU = maxU - minU;
+        const deltaV = maxV - minV;
+        const u = minU + (deltaU * interpolated[0]) / 255;
+        const v = minV + (deltaV * interpolated[1]) / 255;
+
+        data[offset] = u;
+        data[offset + 1] = v;
+        offset += dataBands;
+      }
+    }
+    return data;
+  },
+});
+
+const maxSpeed = 20;
+const colors = colormap({
+  colormap: 'viridis',
+  nshades: 10,
+  alpha: 0.75,
+  format: 'rgba',
+});
+const colorStops = [];
+for (let i = 0; i < colors.length; ++i) {
+  colorStops.push((i * maxSpeed) / (colors.length - 1));
+  colorStops.push(colors[i]);
+}
+
+const windFlowLayer = new Flow({
+    source: windFlowSource,
+    visible: false,
+    maxSpeed,
+    style: {
+      color: ['interpolate', ['linear'], ['get', 'speed'], ...colorStops],
+    },
+  });
+
 const getUrl = () => {
-  return `https://gfstileserver.fly.dev/tiles/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10/{x}/{y}/{z}`;
+  return `${baseUrl}/tiles/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10/{x}/{y}/{z}`;
 };
 
 const source = new VectorTileSource({
@@ -319,6 +325,7 @@ const source = new VectorTileSource({
 
 forecastSelector.addEventListener('updated', e => {
   source.setUrl(getUrl());
+  windFlowSource.refresh();
   info.style.visibility = 'hidden';
 });
 
@@ -352,22 +359,37 @@ const eniroLayer = new TileLayer({
   minZoom: 7,
 });
 
+let state = 0;
 const toggleWindControl = new ToggleControl(
     '<img src="svgs/wind.svg" />',
     'toggle-wind',
     (e) => {
-      forecastSelector.toggleVisibility();
-      if (windLayer.getVisible()) {
-        osmLayer.setOpacity(1);
-        eniroLayer.setOpacity(1);
-        windLayer.setVisible(false);
-        e.element.childNodes[0].childNodes[0].className = '';
-        info.style.visibility = 'hidden';
-      } else {
-        osmLayer.setOpacity(0.3);
-        eniroLayer.setOpacity(0.3);
-        windLayer.setVisible(true);
-        e.element.childNodes[0].childNodes[0].className = 'active';
+      state = (state + 1) % 3;
+      forecastSelector.setVisible(state != 0);
+      switch (state)
+      {
+        case 0:
+          osmLayer.setOpacity(1);
+          eniroLayer.setOpacity(1);
+          windLayer.setVisible(false);
+          windFlowLayer.setVisible(false);
+          e.element.childNodes[0].childNodes[0].className = '';
+          info.style.visibility = 'hidden';
+          break;
+        case 1:
+          osmLayer.setOpacity(0.3);
+          eniroLayer.setOpacity(0.3);
+          windLayer.setVisible(true);
+          windFlowLayer.setVisible(false);
+          e.element.childNodes[0].childNodes[0].className = 'active';
+          break;
+        case 2:
+          osmLayer.setOpacity(0.3);
+          eniroLayer.setOpacity(0.3);
+          windLayer.setVisible(false);
+          windFlowLayer.setVisible(true);
+          e.element.childNodes[0].childNodes[0].className = 'active';
+          break;
       }
     });
 
@@ -445,7 +467,7 @@ const map = new Map({
     eniroLayer,
     windLayer,
     locationLayer,
-    flow,
+    windFlowLayer,
   ],
   view: view,
 });
@@ -544,7 +566,7 @@ map.addEventListener('movestart', function(e) {
 map.addEventListener('click', async function (evt) {
   info.style.visibility = 'hidden';
 
-  if (!windLayer.getVisible())
+  if (state === 0)
   {
     return;
   }
@@ -552,7 +574,7 @@ map.addEventListener('click', async function (evt) {
   const point = map.getCoordinateFromPixel(evt.pixel);
   const lonLat = toLonLat(point);
 
-  const response = await fetch(`https://gfstileserver.fly.dev/position/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10/${lonLat[1]}/${lonLat[0]}`);
+  const response = await fetch(`${baseUrl}/position/gfs/${forecastSelector.getCurrentDate().toISOString()}/wind/M10/${lonLat[1]}/${lonLat[0]}`);
   const data = await response.json();
 
   info.style.left = evt.pixel[0] + 'px';
