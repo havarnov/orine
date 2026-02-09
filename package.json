@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "colormap": "^2.3.2",
-    "ol": "latest"
+    "ol": "latest",
+    "ol-mapbox-style": "13.2.0",
+    "package.json": "^2.0.1"
   }
 }

@@ -27,6 +27,9 @@ import {createXYZ, wrapX} from 'ol/tilegrid.js';
 import {get as getProjection, transform} from 'ol/proj.js';
 import colormap from 'colormap';
 
+import {MapboxVectorLayer} from 'ol-mapbox-style';
+import {apply, applyStyle, setFeatureState} from 'ol-mapbox-style';
+
 const baseUrl = 'https://gfstileserver.fly.dev';
 
 class ForecastSelectorControl extends Control {
@@ -352,12 +355,109 @@ const osmLayer = new TileLayer({
   maxZoom: 7,
 });
 
+// GET https://onlinemaps.skippo.cloud/s57_20250829/7/68/37.mvt
+// url: 'https://onlinemaps.skippo.cloud/osm_20250214/{z}/{x}/{y}.mvt',
+const eniroLayer = new VectorTileLayer({
+    /*
+  declutter: true,
+  source: new VectorTileSource({
+    format: new MVT(),
+    url: 'https://onlinemaps.skippo.cloud/s57_20250829/{z}/{x}/{y}.mvt',
+  }),
+  */
+});
+
+const eniroLayerOsm = new VectorTileLayer({
+    /*
+  declutter: true,
+  source: new VectorTileSource({
+    format: new MVT(),
+    url: 'https://onlinemaps.skippo.cloud/s57_20250829/{z}/{x}/{y}.mvt',
+  }),
+  */
+});
+
+function replaceCoalesceLists(data) {
+    if (data === 'hsla(0, 0, 0, 0)')
+    {
+        return 'hsla(0, 0%, 0%, 10%)';
+    }
+
+    // Base Case 1: If data is null or not an object/array, return it as is.
+    if (data === null || typeof data !== 'object') {
+        return data;
+    }
+
+    // Special Case: Check if the current data structure is the target list.
+    // Base Case 2: If it's an array and its first element is "coalesce", replace it with 1.
+    if (Array.isArray(data) && data.length > 0 && data[0] === 'coalesce') {
+        return 1;
+    }
+
+    // Special Case: Check if the current data structure is the target list.
+    // Base Case 2: If it's an array and its first element is "coalesce", replace it with 1.
+    if (Array.isArray(data) && data.length > 0) {
+        let value = data[0];
+        if (typeof value === "string" && value.toLowerCase().startsWith("roboto")) {
+            return ["literal", ["Arial"]]
+        }
+    }
+
+    // Recursive Step: If it's an array, iterate and call replaceCoalesceLists on each item.
+    if (Array.isArray(data)) {
+        // We use map to create a new array with the transformed values.
+        return data.map(item => replaceCoalesceLists(item));
+    }
+
+    // Recursive Step: If it's a plain object, iterate over keys and call
+    // replaceCoalesceLists on each value.
+    const newObject = {};
+    for (const key in data) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+            newObject[key] = replaceCoalesceLists(data[key]);
+        }
+    }
+    return newObject;
+}
+
+
+// const response = await fetch('https://nautical-style-805612916235.europe-north1.run.app/20251029/style/sun.json');
+const response = await fetch('https://mapresources.skippo.cloud/20250829/style/light.json');
+const style = await response.json();
+const mod = replaceCoalesceLists(style);
+
+await applyStyle(
+    eniroLayer,
+    mod,
+    "nautical");
+
+await applyStyle(
+    eniroLayerOsm,
+    mod,
+    "osm");
+/*
+const eniroLayer = new MapboxVectorLayer({
+  styleUrl: 'https://demo.tegola.io/styles/hot-osm.json',
+  // styleUrl: 'https://nautical-style-805612916235.europe-north1.run.app/20251029/style/sun.json',
+  // styleUrl: 'https://nautical-style-805612916235.europe-north1.run.app/all_20250212/style/light.json',
+  // styleUrl: 'https://nautical-style-805612916235.europe-north1.run.app/all_20250123/style/light.json',
+});
+//
+applyStyle(
+  eniroLayer,
+  'https://nautical-style-805612916235.europe-north1.run.app/20251029/style/sun.json',
+)
+
+const eniroLayer = new MapboxVectorLayer({
+  styleUrl: 'mapbox://styles/mapbox/outdoors-v12',
+});
 const eniroLayer = new TileLayer({
   source: new ImageTile({
     url: 'https://map02.eniro.com/geowebcache/service/tms1.0.0/nautical2x/{z}/{x}/{-y}.png',
   }),
   minZoom: 7,
 });
+*/
 
 let state = 0;
 const toggleWindControl = new ToggleControl(
@@ -464,6 +564,7 @@ const map = new Map({
     //     }),
     // }),
     osmLayer,
+    eniroLayerOsm,
     eniroLayer,
     windLayer,
     locationLayer,
